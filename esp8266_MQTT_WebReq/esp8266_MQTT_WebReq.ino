@@ -2,11 +2,12 @@
 
 #include <SoftwareSerial.h>
 
+#include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 
-#define TOPICO_SUBSCRIBE "lamp"
-#define TOPICO_PUBLISH   "lamp"
+#define TOPICO_SUBSCRIBE "lampReceiving"
+#define TOPICO_PUBLISH   "lampSending"
 
 #define ID_MQTT  "krpgdhec"
 
@@ -29,8 +30,11 @@
 DHT dht(DHTPIN, DHTTYPE);
 
 // WIFI
-const char* SSID = "WLL-Inatel";
-const char* PASSWORD = "inatelsemfio";
+const char* SSID = "WIN-NE7NN0E6UGH 3672";
+const char* PASSWORD = "12345678";
+
+//const char* SSID = "WLL-Inatel";
+//const char* PASSWORD = "inatelsemfio";
 
 // MQTT
 const char* BROKER_MQTT = "soldier.cloudmqtt.com";
@@ -51,6 +55,7 @@ void initMQTT();
 void reconectWiFi();
 void mqtt_callback(char* topic, byte* payload, unsigned int length);
 void VerificaConexoesWiFIEMQTT(void);
+void webRequest();
 
 // D9 (RX) e D10 (TX)
 SoftwareSerial minhaSerial(D9 , D10);
@@ -65,6 +70,7 @@ void setup()
   digitalWrite(D1, LOW);
   initSerial();
   initWiFi();
+  webRequest();
   initMQTT();
   dht.begin();
 }
@@ -99,7 +105,7 @@ void reconnectMQTT()
     Serial.println(BROKER_MQTT);
     if (MQTT.connect(ID_MQTT, mqttUser, mqttpassword))
     {
-      // Serial.println("Conectado com sucesso ao broker MQTT!");
+      Serial.println("Conectado com sucesso ao broker MQTT!");
       MQTT.subscribe(TOPICO_SUBSCRIBE);
     }
     else
@@ -182,8 +188,39 @@ String leStringSerial() {
   return conteudo;
 }
 
+void webRequest() {
+
+  Serial.println("Web Request");
+  
+  int httpCode = 1;
+  if (WiFi.status() == WL_CONNECTED && httpCode != 200) { //Check WiFi connection status
+
+    HTTPClient http;    //Declare object of class HTTPClient
+
+    http.begin("http://10.0.29.59:8080/device");      //Specify request destination
+    //http.begin("http://" + String(SSID) + ":8080/device");      //Specify request destination
+    http.addHeader("Content-Type", "application/json");  //Specify content-type header
+
+    httpCode = http.POST("{\"name\":\"Lamp\",\"type\":\"lamp\",\"subscriptionTopic\":\"lampReceiving\",\"publishingTopic\":\"lampSending\",\"turnOn\":\"ON\",\"turnOff\":\"OFF\"}");   //Send the request
+                             
+    String payload = http.getString();                  //Get the response payload
+
+    Serial.println(httpCode);   //Print HTTP return code
+    Serial.println(payload);    //Print request response payload
+
+    http.end();  //Close connection
+
+  } else {
+
+    Serial.println("Error in WiFi connection");
+
+  }
+}
+
+
 void loop()
 {
+
   float h = dht.readHumidity();
   // Read temperature as Celsius (the default)
   float t = dht.readTemperature();
@@ -201,10 +238,11 @@ void loop()
   String json = String("{\"humidity\": \"") + String(h) + String("%\", \"temperature\": \"") + String(t) + String("°C\"}\"");
 
   VerificaConexoesWiFIEMQTT();
-  
+
   MQTT.loop();
 
   json.toCharArray(Buf, 50);
   EnviaEstadoOutputMQTT();
-  
+  delay(200);
+
 }
